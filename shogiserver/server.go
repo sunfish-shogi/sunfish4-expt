@@ -59,12 +59,15 @@ func (s *ShogiServer) Setup() error {
 }
 
 func (s *ShogiServer) Stop() {
-	if s.cmd != nil && s.cmd.Process != nil {
-		if err := s.cmd.Process.Kill(); err != nil {
-			log.Println(err)
-		} else if _, err := s.cmd.Process.Wait(); err != nil {
-			log.Println(err)
+	if s.cmd != nil {
+		if s.cmd.Process != nil {
+			if err := s.cmd.Process.Kill(); err != nil {
+				log.Println(err)
+			} else if _, err := s.cmd.Process.Wait(); err != nil {
+				log.Println(err)
+			}
 		}
+		s.cmd = nil
 	}
 }
 

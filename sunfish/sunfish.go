@@ -1,4 +1,4 @@
-package ga
+package sunfish
 
 import (
 	"bufio"
@@ -76,7 +76,7 @@ func (s *Sunfish) Setup() error {
 		return errors.Wrap(err, "failed to clone sunfish4")
 	}
 
-	err := s.writeCSAIni()
+	err = s.writeCSAIni()
 	if err != nil {
 		return errors.Wrap(err, "failed to write csa.ini")
 	}
@@ -161,7 +161,7 @@ func (s *Sunfish) StopCSA() error {
 	return nil
 }
 
-func (s *Sunfish) WriteParamHpp(params map[string]int) error {
+func (s *Sunfish) WriteParamHpp(params map[string]int32) error {
 	f, err := os.OpenFile(path.Join(s.Dir(), "src/search/Param.hpp"), os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
 		return err
