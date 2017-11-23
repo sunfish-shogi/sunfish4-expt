@@ -1,4 +1,4 @@
-PKG:=github.com/sunfish-shogi/sunfish4-ga
+PKG:=github.com/sunfish-shogi/sunfish4-expt
 
 .PHONY: help
 help:

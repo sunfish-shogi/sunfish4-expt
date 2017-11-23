@@ -131,14 +131,18 @@ func (s *Sunfish) SymlinkBookBin(orgPath string) error {
 	return util.Symlink(orgPath, path.Join(s.Dir(), "book.bin"))
 }
 
+func (s *Sunfish) BuildCSA() error {
+	cmd := util.Command("make", "csa")
+	cmd.Dir = s.Dir()
+	return cmd.Run()
+}
+
 func (s *Sunfish) StartCSA() error {
 	if s.cmdCSA != nil {
 		return fmt.Errorf("sunfish_csa already started")
 	}
 
-	cmd := util.Command("make", "csa")
-	cmd.Dir = s.Dir()
-	if err := cmd.Run(); err != nil {
+	if err := s.BuildCSA(); err != nil {
 		return errors.Wrap(err, "failed to build sunfish_csa")
 	}
 
