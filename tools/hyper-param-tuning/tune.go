@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"os"
 	"path"
@@ -31,22 +32,26 @@ type Manager struct {
 	server      *server.ShogiServer
 	players     []*player
 	normPlayers []*player
-	scores      []map[int32]scoreType
+	scores      [][]scoreType
+	eval        [][]float64
 	procMutex   sync.Mutex
 }
 
 type scoreType struct {
-	win  float64
-	loss float64
+	value int32
+	win   float64
+	loss  float64
 }
 
 func NewManager(config Config) *Manager {
-	scores := make([]map[int32]scoreType, len(config.Params))
+	scores := make([][]scoreType, len(config.Params))
 	for i := range scores {
-		scores[i] = make(map[int32]scoreType)
+		scores[i] = make([]scoreType, 0)
 		param := config.Params[i]
 		for val := param.MinimumValue; val <= param.MaximumValue; val += param.Step {
-			scores[i][val] = scoreType{}
+			scores[i] = append(scores[i], scoreType{
+				value: val,
+			})
 		}
 	}
 	return &Manager{
@@ -138,13 +143,18 @@ func (m *Manager) next() error {
 	// New Generation
 	players := make([]*player, 0, m.Config.Concurrency)
 	var i int
-	for ; i < m.Config.Concurrency/3; i++ {
+	for ; i < m.Config.Concurrency*1/4; i++ {
 		name := fmt.Sprintf("i-%d", i)
 		players = append(players, m.generatePlayer(name, i, bestValues))
 	}
+	for ; i < m.Config.Concurrency*2/4; i++ {
+		name := fmt.Sprintf("i-%d", i)
+		values := m.mixSecondValue(bestValues)
+		players = append(players, m.generatePlayer(name, i, values))
+	}
 	for ; i < m.Config.Concurrency; i++ {
 		name := fmt.Sprintf("i-%d", i)
-		values := m.mixEpsilonValues(bestValues)
+		values := m.mixRandomValue(bestValues)
 		players = append(players, m.generatePlayer(name, i, values))
 	}
 
@@ -196,19 +206,43 @@ func (m *Manager) Destroy() {
 
 func (m *Manager) updateScores() {
 	for i := range m.Config.Params {
-		for value := range m.scores[i] {
-			score := m.scores[i][value]
-			score.win *= 0.95
-			score.loss *= 0.95
-			m.scores[i][value] = score
+		for j := range m.scores[i] {
+			score := m.scores[i][j]
+			score.win *= 0.99
+			score.loss *= 0.99
+			m.scores[i][j] = score
 		}
 
 		for _, p := range m.players {
 			value := p.values[i]
-			score := m.scores[i][value]
-			score.win += float64(p.score.Win)
-			score.loss += float64(p.score.Lose)
-			m.scores[i][value] = score
+			for j := range m.scores[i] {
+				if m.scores[i][j].value == value {
+					m.scores[i][j].win += float64(p.score.Win)
+					m.scores[i][j].loss += float64(p.score.Lose)
+				}
+			}
+		}
+	}
+
+	m.eval = make([][]float64, len(m.Config.Params))
+	for i := range m.Config.Params {
+		m.eval[i] = make([]float64, len(m.scores[i]))
+
+		for j0 := range m.scores[i] {
+			var win float64
+			var loss float64
+			for j1, score := range m.scores[i] {
+				r := math.Pow(2, -math.Abs(float64(j0-j1)))
+				win += score.win * r
+				loss += score.loss * r
+			}
+			sum := win + loss
+
+			if sum >= 1 {
+				m.eval[i][j0] = win / sum
+			} else {
+				m.eval[i][j0] = rand.Float64() // [0.0,1.0)
+			}
 		}
 	}
 }
@@ -219,17 +253,10 @@ func (m *Manager) getBestValues() ([]int32, []float64) {
 
 	for i := range m.Config.Params {
 		maxRate := float64(-1.0)
-		for value, score := range m.scores[i] {
-			sum := score.win + score.loss
-			var rate float64
-			if sum >= 1 {
-				rate = score.win/sum + (rand.Float64()-0.5)*0.02
-			} else {
-				rate = rand.Float64() // [0.0,1.0)
-			}
-			if rate > maxRate {
-				values[i] = value
-				maxRate = rate
+		for j, score := range m.scores[i] {
+			if m.eval[i][j] > maxRate {
+				values[i] = score.value
+				maxRate = m.eval[i][j]
 			}
 		}
 		rates[i] = maxRate
@@ -238,19 +265,38 @@ func (m *Manager) getBestValues() ([]int32, []float64) {
 	return values, rates
 }
 
-func (m *Manager) mixEpsilonValues(orgValues []int32) []int32 {
+func (m *Manager) mixSecondValue(orgValues []int32) []int32 {
 	values := make([]int32, len(m.Config.Params))
 
-	epsilon := 1.5 / float64(len(m.Config.Params))
+	target := int(rand.Int31n(int32(len(m.Config.Params))))
 	for i := range m.Config.Params {
-		if rand.Float64() < epsilon {
-			vs := make([]int32, len(m.scores[i]))
-			var j int
-			for value := range m.scores[i] {
-				vs[j] = value
-				j++
+		if i == target {
+			maxRate := float64(-1.0)
+			for j, score := range m.scores[i] {
+				if score.value != orgValues[i] && m.eval[i][j] > maxRate {
+					values[i] = score.value
+					maxRate = m.eval[i][j]
+				}
 			}
-			values[i] = vs[rand.Int31n(int32(len(vs)))]
+		} else {
+			values[i] = orgValues[i]
+		}
+	}
+
+	return values
+}
+
+func (m *Manager) mixRandomValue(orgValues []int32) []int32 {
+	values := make([]int32, len(m.Config.Params))
+
+	target := int(rand.Int31n(int32(len(m.Config.Params))))
+	for i := range m.Config.Params {
+		if i == target {
+			r := rand.Int31n(int32(len(m.scores[i]) - 1))
+			if m.scores[i][r].value >= orgValues[i] {
+				r++
+			}
+			values[i] = m.scores[i][r].value
 		} else {
 			values[i] = orgValues[i]
 		}
