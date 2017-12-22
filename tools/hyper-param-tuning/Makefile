@@ -1,5 +1,5 @@
-INST_PATH:=$(GOPATH)/bin/sunfish4-hyper-param-tuning
-BIN:=bin/sunfish4-hyper-param-tuning
+INST_PATH:=$(GOPATH)/bin/hyper-param-tuning
+BIN:=bin/hyper-param-tuning
 PKG:=github.com/sunfish-shogi/sunfish4-expt/tools/hyper-param-tuning
 
 .PHONY: help
