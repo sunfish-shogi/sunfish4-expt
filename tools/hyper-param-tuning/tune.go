@@ -85,7 +85,7 @@ func (m *Manager) next(pi int) {
 
 	m.newPlayers = make([]*player, m.Config.Concurrency)
 	for ci := 0; ci < m.Config.Concurrency; ci++ {
-		if ci < m.Config.Concurrency {
+		if ci < m.Config.Concurrency/2 {
 			name := fmt.Sprintf("l-%d", ci)
 			m.newPlayers[ci] = m.generatePlayer(name, ci, vl)
 		} else {
@@ -114,7 +114,7 @@ func (m *Manager) next(pi int) {
 			continue
 		} else {
 			log.Printf("%s %d - %d\n", p.name, score.Win, score.Lose)
-			if ci < m.Config.Concurrency {
+			if ci < m.Config.Concurrency/2 {
 				lscore.Win += score.Win
 				lscore.Lose += score.Lose
 			} else {
