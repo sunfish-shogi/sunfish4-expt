@@ -7,7 +7,6 @@ help:
 	@echo "USAGE:"
 	@echo "  make build"
 	@echo "  make install"
-	@echo "  make clean"
 	@echo "  make vet"
 	@echo "  make test"
 

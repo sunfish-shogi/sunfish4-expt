@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"math"
-	"math/rand"
 	"os"
 	"path"
 	"strconv"
@@ -23,61 +21,37 @@ type player struct {
 	name    string
 	sunfish *sunfish.Sunfish
 	values  []int32
-	score   sunfish.Score
 }
 
 type Manager struct {
 	Config Config
 
 	server      *server.ShogiServer
-	players     []*player
-	normPlayers []*player
-	scores      [][]scoreType
-	eval        [][]float64
+	newPlayers  []*player
+	currPlayers []*player
+	values      []int32
 	procMutex   sync.Mutex
 }
 
-type scoreType struct {
-	value int32
-	win   float64
-	loss  float64
-}
-
 func NewManager(config Config) *Manager {
-	scores := make([][]scoreType, len(config.Params))
-	for i := range scores {
-		scores[i] = make([]scoreType, 0)
-		param := config.Params[i]
-		for val := param.MinimumValue; val <= param.MaximumValue; val += param.Step {
-			scores[i] = append(scores[i], scoreType{
-				value: val,
-			})
-		}
-	}
 	return &Manager{
 		Config: config,
-		scores: scores,
+		values: generateNormalValues(config),
 	}
 }
 
 func (m *Manager) Run() error {
 	checkFiles()
 
-	defer m.Destroy()
-
-	err := m.start()
-	if err != nil {
-		return err
+	if err := m.start(); err != nil {
+		log.Fatal(err)
 	}
 
-	for gn := 1; ; gn++ {
-		m.PrintGeneration(gn)
+	defer m.Destroy()
 
-		time.Sleep(m.Config.Duration)
-
-		err = m.next()
-		if err != nil {
-			log.Println(err)
+	for {
+		for pi := range m.Config.Params {
+			m.next(pi)
 		}
 	}
 }
@@ -87,100 +61,98 @@ func (m *Manager) start() error {
 	defer m.procMutex.Unlock()
 
 	m.server = server.New()
-	if err := m.server.Setup(); err != nil {
-		return err
-	}
-
-	m.normPlayers = make([]*player, 0, m.Config.Concurrency)
-	for i := 0; i < m.Config.Concurrency; i++ {
-		name := fmt.Sprintf("n-%d", i)
-		values := generateNormalValues(m.Config)
-		m.normPlayers = append(m.normPlayers, m.generatePlayer(name, i, values))
-	}
-
-	m.players = make([]*player, 0, m.Config.Concurrency)
-	for i := 0; i < m.Config.Concurrency; i++ {
-		name := fmt.Sprintf("i-%d", i)
-		values := generateRandomValues(m.Config)
-		m.players = append(m.players, m.generatePlayer(name, i, values))
-	}
-
-	if err := setupPlayers(append(m.players, m.normPlayers...), m.Config); err != nil {
-		return err
-	}
-
-	return startPlayers(append(m.players, m.normPlayers...))
+	return m.server.Setup()
 }
 
-func (m *Manager) next() error {
-	m.procMutex.Lock()
-	defer m.procMutex.Unlock()
+func (m *Manager) next(pi int) {
+	log.Printf("%d: %s curr=%d\n", pi, m.Config.Params[pi].Name, m.values[pi])
+	log.Println()
 
-	log.Println("Scores")
-	var totalScore sunfish.Score
-	for _, p := range m.players {
-		if score, err := p.sunfish.GetScore(); err != nil {
-			log.Println(err)
+	m.currPlayers = make([]*player, m.Config.Concurrency)
+	for ci := 0; ci < m.Config.Concurrency; ci++ {
+		name := fmt.Sprintf("c-%d", ci)
+		m.currPlayers[ci] = m.generatePlayer(name, ci, m.values)
+	}
+
+	vl := make([]int32, len(m.Config.Params))
+	vh := make([]int32, len(m.Config.Params))
+
+	copy(vl, m.values)
+	copy(vh, m.values)
+
+	vl[pi] -= m.Config.Params[pi].Step
+	vh[pi] += m.Config.Params[pi].Step
+
+	m.newPlayers = make([]*player, m.Config.Concurrency)
+	for ci := 0; ci < m.Config.Concurrency; ci++ {
+		if ci < m.Config.Concurrency {
+			name := fmt.Sprintf("l-%d", ci)
+			m.newPlayers[ci] = m.generatePlayer(name, ci, vl)
 		} else {
-			log.Printf("%s %d - %d\n", p.name, score.Win, score.Lose)
-			p.score = score
-			totalScore.Win += score.Win
-			totalScore.Lose += score.Lose
+			name := fmt.Sprintf("h-%d", ci)
+			m.newPlayers[ci] = m.generatePlayer(name, ci, vh)
 		}
 	}
-	log.Printf("total %d - %d (%f)\n", totalScore.Win, totalScore.Lose, float64(totalScore.Win)/float64(totalScore.Win+totalScore.Lose))
-	log.Println()
 
-	// Update Scores
-	m.updateScores()
-
-	// Best Values
-	bestValues, rates := m.getBestValues()
-	log.Printf("best values %s\n", stringifyValues(bestValues))
-	log.Printf("rates %s\n", stringifyRates(rates))
-	log.Println()
-
-	// New Generation
-	players := make([]*player, 0, m.Config.Concurrency)
-	var i int
-	for ; i < m.Config.Concurrency*1/4; i++ {
-		name := fmt.Sprintf("i-%d", i)
-		players = append(players, m.generatePlayer(name, i, bestValues))
-	}
-	for ; i < m.Config.Concurrency*2/4; i++ {
-		name := fmt.Sprintf("i-%d", i)
-		values := m.mixSecondValue(bestValues)
-		players = append(players, m.generatePlayer(name, i, values))
-	}
-	for ; i < m.Config.Concurrency; i++ {
-		name := fmt.Sprintf("i-%d", i)
-		values := m.mixRandomValue(bestValues)
-		players = append(players, m.generatePlayer(name, i, values))
-	}
-
-	// Stop Previous Generation
-	stopPlayers(append(m.players, m.normPlayers...))
-
-	// Replace to New Generation
-	m.players = players
-
-	// Start Next Generation
-	if err := setupPlayers(append(m.players, m.normPlayers...), m.Config); err != nil {
+	if err := m.setupPlayers(m.Config); err != nil {
 		log.Println(err)
 	}
 
-	if err := startPlayers(append(m.players, m.normPlayers...)); err != nil {
+	if err := m.startPlayers(); err != nil {
 		log.Println(err)
 	}
 
-	return nil
+	time.Sleep(m.Config.Duration)
+
+	log.Println("Scores")
+	var lscore sunfish.Score
+	var hscore sunfish.Score
+	for ci := 0; ci < m.Config.Concurrency; ci++ {
+		p := m.newPlayers[ci]
+		if score, err := p.sunfish.GetScore(); err != nil {
+			log.Println(err)
+			continue
+		} else {
+			log.Printf("%s %d - %d\n", p.name, score.Win, score.Lose)
+			if ci < m.Config.Concurrency {
+				lscore.Win += score.Win
+				lscore.Lose += score.Lose
+			} else {
+				hscore.Win += score.Win
+				hscore.Lose += score.Lose
+			}
+		}
+	}
+	log.Printf("low  total %d - %d (%f)\n", lscore.Win, lscore.Lose, float64(lscore.Win)/float64(lscore.Win+lscore.Lose))
+	log.Printf("high total %d - %d (%f)\n", hscore.Win, hscore.Lose, float64(hscore.Win)/float64(hscore.Win+hscore.Lose))
+	log.Println()
+
+	lrate := float64(lscore.Win) / float64(lscore.Lose)
+	hrate := float64(hscore.Win) / float64(hscore.Lose)
+	if lrate <= 0.5 && hrate <= 0.5 {
+		log.Println("do not update")
+	} else {
+		if lrate > hrate {
+			m.values[pi] -= m.Config.Params[pi].Step
+		} else {
+			m.values[pi] += m.Config.Params[pi].Step
+		}
+		log.Printf("update %s %d\n", m.Config.Params[pi].Name, m.values[pi])
+		log.Printf("values %s\n", stringifyValues(m.values))
+	}
+	log.Println()
+
+	// Stop Players
+	stopPlayers(append(m.newPlayers, m.currPlayers...))
 }
 
 func (m *Manager) generatePlayer(name string, gameNumber int, values []int32) *player {
 	s := sunfish.New()
 	s.Config.Directory = name
+	s.Config.Branch = m.Config.Branch
 	s.CSAConfig.Pass = "test" + strconv.Itoa(gameNumber) + "-600-10,SunTest"
 	s.CSAConfig.User = name
+	s.CSAConfig.Limit = m.Config.MoveLimit
 	return &player{
 		name:    name,
 		sunfish: s,
@@ -188,121 +160,12 @@ func (m *Manager) generatePlayer(name string, gameNumber int, values []int32) *p
 	}
 }
 
-func (m *Manager) PrintGeneration(gn int) {
-	log.Printf("Generation: %d\n", gn)
-	for i := range m.players {
-		log.Printf("%s %s\n", m.players[i].name, stringifyValues(m.players[i].values))
-	}
-	log.Println()
-}
-
 func (m *Manager) Destroy() {
 	m.procMutex.Lock()
 	defer m.procMutex.Unlock()
 
-	stopPlayers(append(m.players, m.normPlayers...))
+	stopPlayers(append(m.newPlayers, m.currPlayers...))
 	m.server.Stop()
-}
-
-func (m *Manager) updateScores() {
-	for i := range m.Config.Params {
-		for j := range m.scores[i] {
-			score := m.scores[i][j]
-			score.win *= 0.99
-			score.loss *= 0.99
-			m.scores[i][j] = score
-		}
-
-		for _, p := range m.players {
-			value := p.values[i]
-			for j := range m.scores[i] {
-				if m.scores[i][j].value == value {
-					m.scores[i][j].win += float64(p.score.Win)
-					m.scores[i][j].loss += float64(p.score.Lose)
-				}
-			}
-		}
-	}
-
-	m.eval = make([][]float64, len(m.Config.Params))
-	for i := range m.Config.Params {
-		m.eval[i] = make([]float64, len(m.scores[i]))
-
-		for j0 := range m.scores[i] {
-			var win float64
-			var loss float64
-			for j1, score := range m.scores[i] {
-				r := math.Pow(2, -math.Abs(float64(j0-j1)))
-				win += score.win * r
-				loss += score.loss * r
-			}
-			sum := win + loss
-
-			if sum >= 1 {
-				m.eval[i][j0] = win / sum
-			} else {
-				m.eval[i][j0] = rand.Float64() // [0.0,1.0)
-			}
-		}
-	}
-}
-
-func (m *Manager) getBestValues() ([]int32, []float64) {
-	values := make([]int32, len(m.Config.Params))
-	rates := make([]float64, len(m.Config.Params))
-
-	for i := range m.Config.Params {
-		maxRate := float64(-1.0)
-		for j, score := range m.scores[i] {
-			if m.eval[i][j] > maxRate {
-				values[i] = score.value
-				maxRate = m.eval[i][j]
-			}
-		}
-		rates[i] = maxRate
-	}
-
-	return values, rates
-}
-
-func (m *Manager) mixSecondValue(orgValues []int32) []int32 {
-	values := make([]int32, len(m.Config.Params))
-
-	target := int(rand.Int31n(int32(len(m.Config.Params))))
-	for i := range m.Config.Params {
-		if i == target {
-			maxRate := float64(-1.0)
-			for j, score := range m.scores[i] {
-				if score.value != orgValues[i] && m.eval[i][j] > maxRate {
-					values[i] = score.value
-					maxRate = m.eval[i][j]
-				}
-			}
-		} else {
-			values[i] = orgValues[i]
-		}
-	}
-
-	return values
-}
-
-func (m *Manager) mixRandomValue(orgValues []int32) []int32 {
-	values := make([]int32, len(m.Config.Params))
-
-	target := int(rand.Int31n(int32(len(m.Config.Params))))
-	for i := range m.Config.Params {
-		if i == target {
-			r := rand.Int31n(int32(len(m.scores[i]) - 1))
-			if m.scores[i][r].value >= orgValues[i] {
-				r++
-			}
-			values[i] = m.scores[i][r].value
-		} else {
-			values[i] = orgValues[i]
-		}
-	}
-
-	return values
 }
 
 var evalBinPath = path.Join(util.WorkDir(), "eval.bin")
@@ -318,9 +181,12 @@ func checkFiles() {
 	}
 }
 
-func setupPlayers(players []*player, config Config) error {
+func (m *Manager) setupPlayers(config Config) error {
+	m.procMutex.Lock()
+	defer m.procMutex.Unlock()
+
 	var eg errgroup.Group
-	for _, _p := range players {
+	for _, _p := range append(m.newPlayers, m.currPlayers...) {
 		p := _p
 		eg.Go(func() error {
 			if err := p.sunfish.Setup(); err != nil {
@@ -353,9 +219,12 @@ func setupPlayers(players []*player, config Config) error {
 	return eg.Wait()
 }
 
-func startPlayers(players []*player) error {
+func (m *Manager) startPlayers() error {
+	m.procMutex.Lock()
+	defer m.procMutex.Unlock()
+
 	var eg errgroup.Group
-	for _, _p := range players {
+	for _, _p := range append(m.newPlayers, m.currPlayers...) {
 		p := _p
 		eg.Go(func() error {
 			if err := p.sunfish.StartCSA(); err != nil {
