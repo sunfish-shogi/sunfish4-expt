@@ -123,12 +123,12 @@ func (m *Manager) next(pi int) {
 			}
 		}
 	}
-	log.Printf("low  total %d - %d (%f)\n", lscore.Win, lscore.Lose, float64(lscore.Win)/float64(lscore.Win+lscore.Lose))
-	log.Printf("high total %d - %d (%f)\n", hscore.Win, hscore.Lose, float64(hscore.Win)/float64(hscore.Win+hscore.Lose))
+	lrate := float64(lscore.Win) / float64(lscore.Win+lscore.Lose)
+	hrate := float64(hscore.Win) / float64(hscore.Win+hscore.Lose)
+	log.Printf("low  total %d - %d (%f)\n", lscore.Win, lscore.Lose, lrate)
+	log.Printf("high total %d - %d (%f)\n", hscore.Win, hscore.Lose, hrate)
 	log.Println()
 
-	lrate := float64(lscore.Win) / float64(lscore.Lose)
-	hrate := float64(hscore.Win) / float64(hscore.Lose)
 	if lrate <= 0.5 && hrate <= 0.5 {
 		log.Println("do not update")
 	} else {
