@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/sunfish-shogi/sunfish4-expt/sunfish"
 )
 
 type Param struct {
@@ -38,10 +40,11 @@ func stringifyValues(values []int32) string {
 	return "[" + strings.Join(ss, ",") + "]"
 }
 
-func (p Params) toMap(values []int32) map[string]int32 {
-	m := make(map[string]int32, len(p))
+func (p Params) list(values []int32) []sunfish.SearchParam {
+	m := make([]sunfish.SearchParam, len(p))
 	for i := range p {
-		m[p[i].Name] = values[i]
+		m[i].Name = p[i].Name
+		m[i].Value = values[i]
 	}
 	return m
 }

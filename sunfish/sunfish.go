@@ -165,14 +165,19 @@ func (s *Sunfish) StopCSA() error {
 	return nil
 }
 
-func (s *Sunfish) WriteParamHpp(params map[string]int32) error {
+type SearchParam struct {
+	Name  string
+	Value int32
+}
+
+func (s *Sunfish) WriteParamHpp(params []SearchParam) error {
 	f, err := os.OpenFile(path.Join(s.Dir(), "src/search/Param.hpp"), os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
 		return err
 	}
 
-	for key, value := range params {
-		fmt.Fprintf(f, "#define %s %d\n", key, value)
+	for _, param := range params {
+		fmt.Fprintf(f, "#define %s %d\n", param.Name, param.Value)
 	}
 
 	return f.Close()

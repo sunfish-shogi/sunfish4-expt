@@ -203,7 +203,7 @@ func (m *Manager) setupPlayers(config Config) error {
 				return err
 			}
 
-			if err := p.sunfish.WriteParamHpp(config.Params.toMap(p.values)); err != nil {
+			if err := p.sunfish.WriteParamHpp(config.Params.list(p.values)); err != nil {
 				return err
 			}
 
