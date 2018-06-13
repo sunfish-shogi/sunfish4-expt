@@ -80,8 +80,19 @@ func (m *Manager) next(pi int) {
 	copy(vl, m.values)
 	copy(vh, m.values)
 
-	vl[pi] -= m.Config.Params[pi].Step
-	vh[pi] += m.Config.Params[pi].Step
+	if m.values[pi] <= m.Config.Params[pi].Minimum+m.Config.Params[pi].Step {
+		vl[pi] += m.Config.Params[pi].Step
+		vh[pi] += m.Config.Params[pi].Step * 2
+	} else if m.values[pi] >= m.Config.Params[pi].Maximum-m.Config.Params[pi].Step {
+		vl[pi] -= m.Config.Params[pi].Step * 2
+		vh[pi] -= m.Config.Params[pi].Step
+	} else {
+		vl[pi] -= m.Config.Params[pi].Step
+		vh[pi] += m.Config.Params[pi].Step
+	}
+	log.Printf("low  values %s\n", stringifyValues(vl))
+	log.Printf("high values %s\n", stringifyValues(vh))
+	log.Println()
 
 	m.newPlayers = make([]*player, m.Config.Concurrency)
 	for ci := 0; ci < m.Config.Concurrency; ci++ {
@@ -102,25 +113,31 @@ func (m *Manager) next(pi int) {
 		log.Println(err)
 	}
 
-	time.Sleep(m.Config.Duration)
-
-	log.Println("Scores")
 	var lscore sunfish.Score
 	var hscore sunfish.Score
-	for ci := 0; ci < m.Config.Concurrency; ci++ {
-		p := m.newPlayers[ci]
-		if score, err := p.sunfish.GetScore(); err != nil {
-			log.Println(err)
-			continue
-		} else {
-			log.Printf("%s %d - %d\n", p.name, score.Win, score.Lose)
-			if ci < m.Config.Concurrency/2 {
-				lscore.Win += score.Win
-				lscore.Lose += score.Lose
+	for {
+		time.Sleep(time.Minute * 10)
+
+		lscore = sunfish.Score{}
+		hscore = sunfish.Score{}
+		for ci := 0; ci < m.Config.Concurrency; ci++ {
+			p := m.newPlayers[ci]
+			if score, err := p.sunfish.GetScore(); err != nil {
+				log.Println(err)
+				continue
 			} else {
-				hscore.Win += score.Win
-				hscore.Lose += score.Lose
+				if ci < m.Config.Concurrency/2 {
+					lscore.Win += score.Win
+					lscore.Lose += score.Lose
+				} else {
+					hscore.Win += score.Win
+					hscore.Lose += score.Lose
+				}
 			}
+		}
+		if lscore.Win+lscore.Lose >= m.Config.NumberOfGames &&
+			hscore.Win+hscore.Lose >= m.Config.NumberOfGames {
+			break
 		}
 	}
 	lrate := float64(lscore.Win) / float64(lscore.Win+lscore.Lose)
@@ -133,9 +150,9 @@ func (m *Manager) next(pi int) {
 		log.Println("do not update")
 	} else {
 		if lrate > hrate {
-			m.values[pi] -= m.Config.Params[pi].Step
+			m.values[pi] -= vl[pi]
 		} else {
-			m.values[pi] += m.Config.Params[pi].Step
+			m.values[pi] += vh[pi]
 		}
 		log.Printf("update %s %d\n", m.Config.Params[pi].Name, m.values[pi])
 		log.Printf("values %s\n", stringifyValues(m.values))

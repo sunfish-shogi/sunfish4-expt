@@ -3,25 +3,26 @@ package main
 import (
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/sunfish-shogi/sunfish4-expt/sunfish"
 )
 
 type Param struct {
-	Name   string
-	Normal int32
-	Step   int32
+	Name    string
+	Normal  int32
+	Minimum int32
+	Maximum int32
+	Step    int32
 }
 
 type Params []Param
 
 type Config struct {
-	Params      Params
-	Concurrency int
-	Duration    time.Duration
-	Branch      string
-	MoveLimit   int
+	Params        Params
+	Concurrency   int
+	NumberOfGames int
+	Branch        string
+	MoveLimit     int
 }
 
 func generateNormalValues(config Config) []int32 {
