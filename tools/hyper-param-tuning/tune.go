@@ -80,10 +80,10 @@ func (m *Manager) next(pi int) {
 	copy(vl, m.values)
 	copy(vh, m.values)
 
-	if m.values[pi] <= m.Config.Params[pi].Minimum+m.Config.Params[pi].Step {
+	if m.values[pi] < m.Config.Params[pi].Minimum+m.Config.Params[pi].Step {
 		vl[pi] += m.Config.Params[pi].Step
 		vh[pi] += m.Config.Params[pi].Step * 2
-	} else if m.values[pi] >= m.Config.Params[pi].Maximum-m.Config.Params[pi].Step {
+	} else if m.values[pi] > m.Config.Params[pi].Maximum-m.Config.Params[pi].Step {
 		vl[pi] -= m.Config.Params[pi].Step * 2
 		vh[pi] -= m.Config.Params[pi].Step
 	} else {
