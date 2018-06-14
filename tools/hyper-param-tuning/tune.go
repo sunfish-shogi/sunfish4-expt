@@ -150,9 +150,9 @@ func (m *Manager) next(pi int) {
 		log.Println("do not update")
 	} else {
 		if lrate > hrate {
-			m.values[pi] -= vl[pi]
+			m.values[pi] = vl[pi]
 		} else {
-			m.values[pi] += vh[pi]
+			m.values[pi] = vh[pi]
 		}
 		log.Printf("update %s %d\n", m.Config.Params[pi].Name, m.values[pi])
 		log.Printf("values %s\n", stringifyValues(m.values))
