@@ -179,7 +179,7 @@ func main() {
 		},
 		{
 			Name:    "SINGULAR_MARGIN",
-			Normal:  5,
+			Normal:  15,
 			Minimum: 0,
 			Maximum: 50,
 			Step:    5,
