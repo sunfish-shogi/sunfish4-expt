@@ -25,14 +25,14 @@ func main() {
 	params := []Param{
 		{
 			Name:    "EXT_SINGULAR",
-			Normal:  2,
+			Normal:  3,
 			Minimum: 0,
 			Maximum: 8,
 			Step:    1,
 		},
 		{
 			Name:    "EXT_DEPTH_CHECK",
-			Normal:  3,
+			Normal:  2,
 			Minimum: 0,
 			Maximum: 8,
 			Step:    1,
@@ -60,7 +60,7 @@ func main() {
 		},
 		{
 			Name:    "NULL_DEPTH_REDUCE",
-			Normal:  14,
+			Normal:  16,
 			Minimum: 0,
 			Maximum: 24,
 			Step:    2,
@@ -74,7 +74,7 @@ func main() {
 		},
 		{
 			Name:    "REDUCTION_RATE1",
-			Normal:  12,
+			Normal:  8,
 			Minimum: 0,
 			Maximum: 50,
 			Step:    4,
@@ -88,7 +88,7 @@ func main() {
 		},
 		{
 			Name:    "RAZOR_MARGIN1",
-			Normal:  230,
+			Normal:  240,
 			Minimum: 100,
 			Maximum: 1000,
 			Step:    10,
@@ -102,14 +102,14 @@ func main() {
 		},
 		{
 			Name:    "RAZOR_MARGIN3",
-			Normal:  820,
+			Normal:  810,
 			Minimum: 100,
 			Maximum: 1000,
 			Step:    10,
 		},
 		{
 			Name:    "RAZOR_MARGIN4",
-			Normal:  660,
+			Normal:  650,
 			Minimum: 100,
 			Maximum: 1000,
 			Step:    10,
@@ -123,28 +123,28 @@ func main() {
 		},
 		{
 			Name:    "FUT_PRUN_MARGIN_RATE",
-			Normal:  40,
+			Normal:  30,
 			Minimum: 10,
 			Maximum: 300,
 			Step:    10,
 		},
 		{
 			Name:    "FUT_PRUN_MARGIN",
-			Normal:  70,
+			Normal:  80,
 			Minimum: 0,
 			Maximum: 300,
 			Step:    10,
 		},
 		{
 			Name:    "PROBCUT_MARGIN",
-			Normal:  200,
+			Normal:  190,
 			Minimum: 0,
 			Maximum: 500,
 			Step:    10,
 		},
 		{
 			Name:    "PROBCUT_REDUCTION",
-			Normal:  16,
+			Normal:  18,
 			Minimum: 0,
 			Maximum: 40,
 			Step:    2,
@@ -189,7 +189,7 @@ func main() {
 		Params:        params,
 		Concurrency:   16,
 		NumberOfGames: 2000,
-		Branch:        "new-feature",
+		Branch:        "master",
 		MoveLimit:     1,
 	}
 
