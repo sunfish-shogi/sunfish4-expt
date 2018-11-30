@@ -151,8 +151,8 @@ func main() {
 		},
 		{
 			Name:    "ASP_MIN_DEPTH",
-			Normal:  0,
-			Minimum: 0,
+			Normal:  3,
+			Minimum: 2,
 			Maximum: 24,
 			Step:    4,
 		},
